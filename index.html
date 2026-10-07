@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Controle Financeiro da Moto</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #fff; --text: #1d2330; --muted: #6b7385; --line: #e3e6ec;
+    --accent: #e8590c; --green: #2b9348; --red: #d62839; --blue: #2563eb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14161b; --card: #1d2027; --text: #e8eaf0; --muted: #9aa1b2; --line: #2b2f39; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  header { background: var(--accent); color: #fff; padding: 16px; }
+  header .in { max-width: 960px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+  h1 { margin: 0; font-size: 1.25rem; }
+  main { max-width: 960px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .card h2 { margin: 0 0 12px; font-size: 1rem; }
+  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  .stat small { color: var(--muted); display: block; margin-bottom: 4px; }
+  .stat b { font-size: 1.3rem; }
+  .pos { color: var(--green); } .neg { color: var(--red); }
+  form { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); align-items: end; }
+  label { display: grid; gap: 4px; font-size: .8rem; color: var(--muted); }
+  input, select, button { font: inherit; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+  button { cursor: pointer; background: var(--accent); color: #fff; border: 0; font-weight: 600; }
+  button.ghost { background: transparent; color: inherit; border: 1px solid rgba(255,255,255,.6); padding: 7px 12px; font-weight: 500; }
+  button.sec { background: var(--bg); color: var(--text); border: 1px solid var(--line); }
+  button.del { background: transparent; color: var(--red); padding: 4px 8px; font-size: 1rem; }
+  .bar { display: grid; grid-template-columns: 120px 1fr 90px; gap: 8px; align-items: center; margin: 6px 0; font-size: .85rem; }
+  .bar .track { background: var(--bg); border-radius: 6px; height: 14px; overflow: hidden; }
+  .bar .fill { height: 100%; background: var(--accent); border-radius: 6px; }
+  .bar span:last-child { text-align: right; }
+  .tablewrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; font-size: .75rem; text-transform: uppercase; }
+  td.v { text-align: right; font-weight: 600; }
+  .empty { color: var(--muted); text-align: center; padding: 18px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .hidden { display: none; }
+  .tip { font-size: .8rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <div class="in">
+    <h1>🏍️ Controle Financeiro da Moto</h1>
+    <div class="row">
+      <input type="month" id="mes" title="Mês" style="padding:6px 8px">
+      <button class="ghost" id="btnCsv">Exportar CSV</button>
+      <button class="ghost" id="btnBackup">Backup</button>
+      <button class="ghost" id="btnRestore">Restaurar</button>
+      <input type="file" id="fileRestore" accept="application/json" class="hidden">
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="grid" id="resumo"></section>
+
+  <section class="card">
+    <h2>Novo lançamento</h2>
+    <form id="form">
+      <label>Tipo
+        <select id="tipo">
+          <option value="despesa">Despesa</option>
+          <option value="receita">Receita / Ganho</option>
+        </select>
+      </label>
+      <label>Data <input type="date" id="data" required></label>
+      <label>Categoria <select id="cat"></select></label>
+      <label>Valor (R$) <input type="number" id="valor" step="0.01" min="0" required placeholder="0,00"></label>
+      <label>Descrição <input type="text" id="desc" placeholder="Ex.: posto Shell"></label>
+      <label>Km atual (opcional) <input type="number" id="km" min="0" placeholder="Odômetro"></label>
+      <label class="comb hidden">Litros <input type="number" id="litros" step="0.01" min="0" placeholder="Abastecimento"></label>
+      <button type="submit">Adicionar</button>
+    </form>
+    <p class="tip">Dica: informe o km e os litros ao abastecer para calcular o consumo (km/l) e o custo por km.</p>
+  </section>
+
+  <section class="card">
+    <h2>Gastos por categoria</h2>
+    <div id="cats"></div>
+  </section>
+
+  <section class="card">
+    <h2>Lançamentos do mês</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Data</th><th>Categoria</th><th>Descrição</th><th>Km</th><th style="text-align:right">Valor</th><th></th></tr></thead>
+        <tbody id="lista"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script>
+const CAT_DESP = ['Combustível','Óleo / Lubrificação','Manutenção','Peças','Pneus','Seguro','IPVA / Licenciamento','Multas','Estacionamento / Pedágio','Equipamentos','Parcela / Financiamento','Outros'];
+const CAT_REC = ['Corridas / Entregas','Salário / Outros ganhos','Venda','Outros'];
+const KEY = 'moto-financas-v1';
+const $ = id => document.getElementById(id);
+const brl = n => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const num = (n, d = 2) => n.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+let dados = [];
+try { dados = JSON.parse(localStorage.getItem(KEY)) || []; } catch { dados = []; }
+const salvar = () => { try { localStorage.setItem(KEY, JSON.stringify(dados)); } catch {} };
+
+const hoje = new Date();
+const iso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+$('data').value = iso(hoje);
+$('mes').value = iso(hoje).slice(0, 7);
+
+function preencherCats() {
+  const lista = $('tipo').value === 'despesa' ? CAT_DESP : CAT_REC;
+  $('cat').innerHTML = lista.map(c => `<option>${c}</option>`).join('');
+  toggleComb();
+}
+function toggleComb() {
+  $('form').querySelector('.comb').classList.toggle('hidden', !($('tipo').value === 'despesa' && $('cat').value === 'Combustível'));
+}
+$('tipo').onchange = preencherCats;
+$('cat').onchange = toggleComb;
+
+$('form').onsubmit = e => {
+  e.preventDefault();
+  const comb = $('tipo').value === 'despesa' && $('cat').value === 'Combustível';
+  dados.push({
+    id: Date.now() + Math.random(),
+    tipo: $('tipo').value, data: $('data').value, cat: $('cat').value,
+    valor: parseFloat($('valor').value) || 0, desc: $('desc').value.trim(),
+    km: parseFloat($('km').value) || null,
+    litros: comb ? (parseFloat($('litros').value) || null) : null
+  });
+  salvar();
+  $('valor').value = $('desc').value = $('litros').value = '';
+  $('mes').value = $('data').value.slice(0, 7);
+  render();
+};
+
+function remover(id) {
+  if (!confirm('Excluir este lançamento?')) return;
+  dados = dados.filter(d => d.id !== id);
+  salvar(); render();
+}
+
+// Consumo médio (km/l): usa abastecimentos com km e litros, ordenados por km.
+function consumo(lista) {
+  const ab = lista.filter(d => d.litros && d.km).sort((a, b) => a.km - b.km);
+  if (ab.length < 2) return null;
+  const km = ab[ab.length - 1].km - ab[0].km;
+  const litros = ab.slice(1).reduce((s, d) => s + d.litros, 0); // o 1º tanque só marca o ponto de partida
+  return litros > 0 ? km / litros : null;
+}
+
+function render() {
+  const mes = $('mes').value;
+  const doMes = dados.filter(d => d.data.startsWith(mes)).sort((a, b) => b.data.localeCompare(a.data));
+  const rec = doMes.filter(d => d.tipo === 'receita').reduce((s, d) => s + d.valor, 0);
+  const desp = doMes.filter(d => d.tipo === 'despesa').reduce((s, d) => s + d.valor, 0);
+  const saldo = rec - desp;
+
+  const kms = dados.filter(d => d.km).map(d => d.km);
+  const kmRodados = doMes.filter(d => d.km).length >= 2
+    ? Math.max(...doMes.filter(d => d.km).map(d => d.km)) - Math.min(...doMes.filter(d => d.km).map(d => d.km)) : null;
+  const cons = consumo(dados.filter(d => d.tipo === 'despesa'));
+  const custoKm = kmRodados ? desp / kmRodados : null;
+
+  const stat = (t, v, cls = '') => `<div class="stat"><small>${t}</small><b class="${cls}">${v}</b></div>`;
+  $('resumo').innerHTML =
+    stat('Receitas', brl(rec), 'pos') +
+    stat('Despesas', brl(desp), 'neg') +
+    stat('Saldo do mês', brl(saldo), saldo >= 0 ? 'pos' : 'neg') +
+    stat('Consumo médio', cons ? num(cons, 1) + ' km/l' : '—') +
+    stat('Custo por km (mês)', custoKm ? brl(custoKm) : '—') +
+    stat('Último km', kms.length ? num(Math.max(...kms), 0) + ' km' : '—');
+
+  const porCat = {};
+  doMes.filter(d => d.tipo === 'despesa').forEach(d => porCat[d.cat] = (porCat[d.cat] || 0) + d.valor);
+  const ord = Object.entries(porCat).sort((a, b) => b[1] - a[1]);
+  const max = ord.length ? ord[0][1] : 1;
+  $('cats').innerHTML = ord.length ? ord.map(([c, v]) =>
+    `<div class="bar"><span>${esc(c)}</span><div class="track"><div class="fill" style="width:${v / max * 100}%"></div></div><span>${brl(v)} <small class="tip">(${num(v / desp * 100, 0)}%)</small></span></div>`
+  ).join('') : '<div class="empty">Sem despesas neste mês.</div>';
+
+  $('lista').innerHTML = doMes.length ? doMes.map(d => {
+    const [y, m, dia] = d.data.split('-');
+    const extra = d.litros ? ` · ${num(d.litros)} L` : '';
+    return `<tr><td>${dia}/${m}/${y}</td><td>${esc(d.cat)}</td><td>${esc(d.desc)}${extra}</td><td>${d.km ? num(d.km, 0) : ''}</td>` +
+      `<td class="v ${d.tipo === 'receita' ? 'pos' : 'neg'}">${d.tipo === 'receita' ? '+' : '−'} ${brl(d.valor)}</td>` +
+      `<td><button class="del" title="Excluir" data-id="${d.id}">✕</button></td></tr>`;
+  }).join('') : '<tr><td colspan="6" class="empty">Nenhum lançamento neste mês.</td></tr>';
+}
+
+$('lista').onclick = e => {
+  const b = e.target.closest('button[data-id]');
+  if (b) remover(parseFloat(b.dataset.id));
+};
+$('mes').onchange = render;
+
+function baixar(nome, conteudo, tipo) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([conteudo], { type: tipo }));
+  a.download = nome; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+$('btnCsv').onclick = () => {
+  const mes = $('mes').value;
+  const linhas = [['Data','Tipo','Categoria','Descrição','Km','Litros','Valor']];
+  dados.filter(d => d.data.startsWith(mes)).sort((a, b) => a.data.localeCompare(b.data))
+    .forEach(d => linhas.push([d.data, d.tipo, d.cat, d.desc, d.km ?? '', d.litros ?? '', String(d.valor).replace('.', ',')]));
+  const csv = linhas.map(l => l.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
+  baixar(`moto-${mes}.csv`, '﻿' + csv, 'text/csv;charset=utf-8');
+};
+$('btnBackup').onclick = () => baixar(`moto-backup-${iso(new Date())}.json`, JSON.stringify(dados, null, 2), 'application/json');
+$('btnRestore').onclick = () => $('fileRestore').click();
+$('fileRestore').onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const j = JSON.parse(r.result);
+      if (!Array.isArray(j)) throw 0;
+      if (confirm('Substituir os dados atuais pelo backup?')) { dados = j; salvar(); render(); }
+    } catch { alert('Arquivo de backup inválido.'); }
+  };
+  r.readAsText(f); e.target.value = '';
+};
+
+preencherCats();
+render();
+</script>
+</body>
+</html>
